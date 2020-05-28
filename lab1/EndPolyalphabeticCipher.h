@@ -1,0 +1,180 @@
+#include<cstring>
+#include<string>
+#include<vector>
+#include<set>
+#include<map>
+#include<algorithm>
+#include<iostream>
+using namespace std;
+
+struct Node{
+	double value;
+	int length;
+};
+
+vector<Node> key;
+set<int> keyLen;
+
+double g[] = {
+	0.08167,0.01492,0.02782,0.04253,0.12702,0.02228,0.02015,
+	0.06094,0.06966,0.00153,0.00772,0.04025,0.02046,0.06749,
+	0.07507,0.01929,0.00095,0.05987,0.06327,0.09056,0.02758,
+	0.00978,0.02360,0.00150,0.01974,0.00074
+};
+
+bool cmp(Node a,Node b){
+	return a.value < b.value;
+}
+
+
+double coincidenceIndex(string cipher,int start,int length){
+	double index = 0.000;
+	int sum = 0;
+	int num[26];
+	memset(num,0,sizeof(num));
+
+	//keyPoint
+	while(start <= cipher.length()){
+		num[cipher[start] - 'a']++;
+		
+		start += length;
+		
+		sum++;
+	}
+
+	for(int i = 0;i < 26;i++){
+		if(num[i] <= 1)continue;
+			
+		index += (double) (num[i] * (num[i] - 1)) / (double) ((sum) * (sum -1)); 
+	}
+	return index;
+}
+
+void findSame(string cipher){
+	
+	for(int i = 3;i < 5;i++){
+		for(int j = 0;j < cipher.length() - 1;j++){
+			string p = cipher.substr(j,i);
+			for(int k = j + i;k < cipher.length() - i;k++){
+				string tmp = cipher.substr(k,i);
+				if(tmp == p){
+					Node x;
+					
+					x.length = k - j;
+					
+					key.push_back(x);
+				}
+			}
+		}
+	}
+	
+}
+
+int gcd(int a,int b){
+	if(b == 0) return a;
+	else return gcd(b,a % b);
+}
+
+void print(){
+	for(int i = 0;i < key.size();i++){
+		cout << key[i].length<< " and " << key[i].value << endl;
+	}
+	
+}
+
+void getKey(string cipher){
+	findSame(cipher);
+
+	for(int i = 0;i < key.size();i++){
+		int x = key[i].length;
+		
+		for(int j = 0;j < key.size();j++){
+			if(key[i].length > key[j].length){
+				keyLen.insert(gcd(key[i].length,key[j].length));
+			}else{
+				keyLen.insert(gcd(key[j].length,key[i].length));
+			}
+		}
+	}
+	
+	key.clear();
+
+	set<int>::iterator it = keyLen.begin();
+
+	while(it != keyLen.end()){
+		int length = (*it);
+
+		if(length == 1){
+			it++;
+			continue;
+		}
+
+		double sum = 0.000;
+
+		cout << length << " ";
+
+		for(int i = 0;i < length;i++){
+			cout << coincidenceIndex(cipher,i,length) << " ";
+			sum += coincidenceIndex(cipher,i,length);
+		}	
+	
+		cout << endl;
+
+		Node x;
+		x.length = length;
+		x.value = (double)fabs(0.065 - (double)(sum / (double)length));
+		if(x.value <= 0.1) key.push_back(x);
+		
+		it++;
+	}
+	sort(key.begin(),key.end(),cmp);
+}
+
+void getAns(string cipher){
+	
+	int lss = 0;
+
+	while(lss < key.size() && lss < 10){
+		Node x = key[lss];
+		
+		int ans[cipher.length()];
+		memset(ans,0,sizeof(ans));
+	
+		map<char,int> mp;
+		
+		for(int i = 0;i < x.length;i++){
+			double maxPg = 0.000;
+	
+			for(int k = 0;k < 26;k++){
+				mp.clear();
+				double pg = 0.000;
+				int sum = 0;
+				
+				for(int j = i;j < cipher.length();j += x.length){
+					char c = (char)((cipher[j] - 'a' + k) % 26 + 'a');
+					mp[c]++;
+					sum++;
+				}
+
+				for(char j = 'a'; j <= 'z';j++){
+					pg += ( (double)mp[j] / (double)sum ) * g[j - 'a'];
+				}
+
+				if(pg > maxPg){
+					ans[i] = k;
+					maxPg = pg;
+				}
+			}				
+		}
+		cout << endl << "Clear text:"<< endl;
+	
+		for(int i = 0;i < cipher.length();i++){
+			cout << (char) ((cipher[i] - 'a' + ans[i % x.length]) % 26 + 'a');
+		}
+
+		cout << endl;
+		lss++;
+	}
+	
+}
+

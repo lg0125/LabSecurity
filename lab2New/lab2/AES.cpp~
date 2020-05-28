@@ -1,0 +1,284 @@
+#include "AES.h"
+
+byte AES::Mul(byte a,byte b){
+	if(a && b){
+		return AlogTable[((unsigned char)LogTable[a] + (unsigned char)LogTable[b]) % 255];
+	}
+	return 0;
+}
+
+//Encrypt
+void AES::MixColumns(){
+	byte temp[4];
+	for(int c = 0;c < Nb;c++){
+		//4 rows and Nb columns to store temp mix col value
+		for(int r = 0;r < 4;r++){
+			temp[r] = Mul(ColMixMatrix[r][0],(state[0][c]))
+				 ^Mul(ColMixMatrix[r][1],(state[1][c]))
+				 ^Mul(ColMixMatrix[r][2],(state[2][c]))
+				 ^Mul(ColMixMatrix[r][3],(state[3][c]));
+		
+		}
+		state[0][c] = temp[0];
+		state[1][c] = temp[1];
+		state[2][c] = temp[2];
+		state[3][c] = temp[3];
+	}
+}
+
+void AES::ShiftRows(){
+	//row  always 4
+	for(int r = 0;r < 4;r++){
+		byte temp[4];
+		for(int c = 0;c < Nb;c++){
+			temp[c] = state[r][(r + c) % Nb];	
+		}
+		state[r][0] = temp[0];
+		state[r][1] = temp[1];
+		state[r][2] = temp[2];
+		state[r][3] = temp[3];
+	}
+
+}
+
+void AES::SubByte(byte oneByte){
+	//one byte represent in hex (xy)
+	//x is row index AND y is column index
+	return S_Box[oneByte];
+}
+
+void AES::SubBytes(){
+	for(int i = 0;i < 4;i++){
+		for(int j = 0;j < Nb;j++){
+			state[i][j] = SubBytes(state[i][j]);
+		}
+	}
+}
+
+word AES::SubWord(word val){
+	byte oneByte;
+	word res = 0;
+	
+	for(int i = 0;i < 4;i++){
+		res = res << 8;
+		oneByte = (val >> 24) & 0xFF;
+		res = res | SubByte(oneByte);
+		val = val << 8;
+	}
+	
+	return res;
+}
+
+word AES::RotWord(word val){
+	word res = val << 8;
+	res = res | (val >> 24);
+	return res;
+}
+
+void AES::AddRoundKey(int roundNo){
+	for(int col = 0;col < Nb;col++){
+		word roundKeyVal = ExpandedKey[(roundNo * Nb) + col];
+		for(int row = 3;row >= 0;row--){
+			state[row][col] ^= (roundKeyVal & 0xFF);
+			roundKeyVal = roundKeyVal >> 8;
+		}
+	}
+}
+
+//destructor
+AES::~AES(){
+	/* #ifdef _KEY_TEST_
+		if(in){
+			in.close();
+		}
+	#endif
+
+	#ifdef _TEST_STATE_
+		if(stest_fin)
+			stest_fin.close();
+	#endif */
+}
+
+
+//constructor
+AES::AES(string key,int bitSize){
+	Nr = bitSize / 32 + 6;
+	Nk = bitSize / 32;
+	Nb = 4; //always 4
+
+	ExpandedKey.resize(Nk * (Nr + 1));
+
+	/* #ifdef _TEST_STATE_
+		stest_fin.open("128_enc_test.text",ios::in);
+		if(!stest_fin){
+			cout << "Cannot Open" << endl;
+		}
+	#endif //_Debug_
+	
+	#ifdef _KEY_TEST_
+		in.open("128_key_test.txt",ios::in);
+		if(!in){
+			cout << "Cannot open" << endl;
+			exit(1);
+		}
+	#endif */
+
+	KeyExpansion(key);
+}
+
+void AES::KeyExpansion(string key){
+	word temp;
+	
+	for(int i = 0;i < Nk;i++){
+		ExpandedKey[i] = ((unsigned char) key[4 * i] << 24) |
+				 ((unsigned char) key[4 * i + 1] << 16) |
+				 ((unsigned char) key[4 * i + 2] << 8) |
+				 ((unsigned char) key[4 * i + 3]);
+		cout << hex << ExpandedKey[i] << endl;
+	}
+
+	for(int i = Nk;i < Nb * (Nr + 1);i++){
+		temp = ExpandedKey[i - 1];
+		if(i % Nk == 0){
+			temp = (SubWord(RotWord(temp)))
+			      ^(Rcon[i / Nk] << 24);
+		}else if(Nk > 6 && (i & Nk == 4)){
+			temp = Subword(temp);
+		}
+
+		ExpandedKey[i] = ExpandedKey[i - Nk] ^ temp;	
+	}
+}
+
+void AES::Encrypt(string plainText){
+	if((plainText.length() % (4 * Nb)) != 0)
+		plainText.append((4 * Nb) - (plainText.length() % (4 * Nb)),'\0');
+	int count = 0;
+	while(count < (plainText.length())){
+		//copy one block into state
+		for(int c = 0;c < Nb;c++){
+			for(int r = 0;r < 4;r++){
+				state[r][c] = plainText[count + (c * Nb) + r];
+			}
+		}
+		AddRoundKey(0);
+	
+		int i;
+		for(i = 1;i < Nr;i++){
+			SubBytes();
+		
+			ShiftRows();
+
+			MixColumns();
+
+			AddRoundKey(i);
+		}
+
+		//finally
+		SubBytes();
+		ShiftRows();
+		AddRoundKey(Nr);
+
+		cipherText = cipherText + ToString();
+		count += 4 * Nb;
+
+	}
+}
+
+string AES::GetCipherText(){
+	return cipherText;
+}
+
+string AES::ToString(){
+	string str;
+	for(int c = 0;c < Nb;c++){
+		for(int r = 0;r < Nb;r++){
+			str.push_back(state[r][c]);
+		}	
+	}
+	return str;
+}
+
+//Decrypt
+void AES:;InvMixColumns(){
+	byte temp[4];
+
+	for(int c = 0;c < Nb;c++){
+		//4 rows and Nb columns to store temp mix col value;
+		for(int r = 0;r < 4;r++){
+			temp[r] = Mul(InvColMixMatrix[r][0],(state[0][c]))
+				^ Mul(InvColMixMatrix[r][1],(state[1][c]))
+			       	^ Mul(InvColMixMatrix[r][2],(state[2][c]))
+				^ Mul(InvColMixMatrix[r][3],(state[3][c]))		
+		}
+		state[0][c] = temp[0];
+		state[1][c] = temp[1];
+		state[2][c] = temp[2];
+		state[3][c] = temp[3];
+	}
+}
+
+void AES::InvShiftRows(){
+	//row is always 4
+	for(int r = 0;r < 4;r++){
+		byte temp[4];
+
+		temp[0] = state[r][0];
+		temp[1] = state[r][1];
+		temp[2] = state[r][2];
+		temp[3] = state[r][3];
+
+		for(int c = 0;c < Nb;c++){
+			state[r][(r + c) % Nb] = temp[c];	
+		}
+	}
+}
+
+byte AES::InvSubByte(byte oneByte){
+	//one byte representation in hex(xy) 
+	//x is row index and y is column index
+	return Si_Box[oneByte];
+}
+
+void AES::InvSubBytes(){
+	for(int i = 0;i < 4;i++){
+		for(int j = 0;j < Nb;j++){
+			state[i][j] = InvSubByte(State[i][j]);
+		}
+	
+	}
+}
+
+void AES::Decrypt(string cipherText){
+	if((cipherText.length() % (4 * Nb)) != 0)
+		cipherText.append((4 * Nb) - (cipherText.length() % (4 * Nb)),'\0');
+	int count = 0;
+	
+	while(count < (cipherText.length())){
+		//copy one block into state
+		for(int c = 0;c < Nb;c++){
+			for(int r = 0;r < 4;r++){
+				state[r][c]=cipherText[count + (c * Nb) + r];
+			}
+		}
+		AddRoundKey(Nr);
+		
+		int i;
+		for(i = Nr - 1;i > 0;i--){
+			InvShiftRows();
+			InvSubBytes();
+			AddRoundKey(i);
+			InvMixColumns();
+		}
+
+		//finally
+		InvSubBytes();
+		InvShiftRows();
+		AddRoundKey(0);
+		count += 4 * Nb;
+	
+	}
+}
+
+
+
